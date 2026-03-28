@@ -20,7 +20,12 @@ jobs:
                   fetch-depth: 0
                   token: ${{ secrets.GITHUB_TOKEN }}
 
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+
             - name: Sync upstream
+              id: sync
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -32,9 +37,59 @@ jobs:
                   git log --oneline origin/main -1
                   if git merge-base --is-ancestor upstream/main HEAD; then
                       echo "Already up to date with upstream."
+                      echo "synced=false" >> "$GITHUB_OUTPUT"
                   else
                       echo "Merging upstream changes..."
                       git merge upstream/main --no-edit
-                      git push origin main
-                      echo "Sync complete."
+                      echo "synced=true" >> "$GITHUB_OUTPUT"
                   fi
+
+            - name: Patch README with fork banner
+              if: steps.sync.outputs.synced == 'true'
+              run: |
+                  VERSION=$(node version.cjs)
+                  UPSTREAM_SHA=$(git rev-parse upstream/main)
+                  SHORT_SHA=${UPSTREAM_SHA:0:7}
+
+                  # Remove any existing fork banner (between marker comments)
+                  sed -i '/^<!-- FORK-BANNER-START -->/,/^<!-- FORK-BANNER-END -->/d' README.md
+
+                  # Build the banner (no heredoc to avoid indentation issues)
+                  {
+                  echo '<!-- FORK-BANNER-START -->'
+                  echo '> [!IMPORTANT]'
+                  echo '> ## 🔀 Unofficial Windows ARM64 Fork'
+                  echo '>'
+                  echo '> This is an **unofficial fork** of [Wave Terminal](https://github.com/wavetermdev/waveterm) that provides Windows ARM64 builds.'
+                  echo '>'
+                  echo '> ### Fork Changes'
+                  echo '> - **Windows ARM64 builds** — cross-compiled and published as GitHub Releases on every upstream sync'
+                  echo "> - **Auto-updater** — points to this fork's GitHub Releases instead of upstream's servers"
+                  echo '> - **Update check interval** — changed to daily (±2h jitter) to reduce GitHub API load'
+                  echo '> - **Unsigned binaries** — Windows SmartScreen may warn on first run'
+                  echo '>'
+                  printf '> **Current version:** `%s` · **Upstream sync:** [`%s`](https://github.com/wavetermdev/waveterm/commit/%s) · **Downloads:** [Releases](https://github.com/da5is/waveterm/releases)\n' \
+                      "$VERSION" "$SHORT_SHA" "$UPSTREAM_SHA"
+                  echo '<!-- FORK-BANNER-END -->'
+                  echo ''
+                  } > /tmp/fork-banner.md
+
+                  # Prepend to README
+                  cat /tmp/fork-banner.md README.md > /tmp/readme-new.md
+                  mv /tmp/readme-new.md README.md
+
+                  echo "README patched with fork banner (version: $VERSION, upstream: $SHORT_SHA)"
+
+            - name: Push changes
+              if: steps.sync.outputs.synced == 'true'
+              run: |
+                  git add -A
+                  # Amend the merge commit if only README changed, otherwise new commit
+                  if git diff --cached --quiet; then
+                      echo "No additional changes to commit"
+                  else
+                      git commit -m "docs: update fork banner in README
+
+                  Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+                  fi
+                  git push origin main
