@@ -22,6 +22,52 @@ jobs:
         steps:
             - uses: actions/checkout@v6
 
+            # ── Fork-specific patches (applied at build time, source stays upstream-clean) ──
+
+            # Replace "win32" with "windows" in artifact names (electron uses "win32" for all Windows builds)
+            - name: Patch artifact naming
+              run: |
+                  $file = "electron-builder.config.cjs"
+                  (Get-Content $file -Raw).Replace('${productName}-${platform}-${arch}-${version}.${ext}', '${productName}-windows-${arch}-${version}.${ext}') | Set-Content $file -NoNewline
+                  Write-Host "Patched artifact name to use 'windows' instead of 'win32'"
+              shell: powershell
+
+            # Point auto-updater at this fork's GitHub Releases instead of upstream S3
+            - name: Patch auto-update provider
+              run: |
+                  $file = "electron-builder.config.cjs"
+                  $content = Get-Content $file -Raw
+                  $oldPublish = 'provider: "generic",\s*\n\s*url: "https://dl\.waveterm\.dev/releases-w2",'
+                  $newPublish = "provider: `"github`",`n        owner: `"da5is`",`n        repo: `"waveterm`","
+                  $content = $content -replace $oldPublish, $newPublish
+                  Set-Content $file $content -NoNewline
+                  Write-Host "Patched electron-builder publish config"
+              shell: powershell
+
+            # Change default update check interval to 24 hours (upstream default is 1 hour)
+            - name: Patch update check interval
+              run: |
+                  $file = "pkg/wconfig/defaultconfig/settings.json"
+                  (Get-Content $file -Raw) -replace '"autoupdate:intervalms":\s*\d+', '"autoupdate:intervalms": 86400000' | Set-Content $file -NoNewline
+                  Write-Host "Patched default interval to 24h"
+              shell: powershell
+
+            # Add ±2 hour jitter to update checks to spread load across GitHub API
+            - name: Patch updater with check jitter
+              run: |
+                  $file = "emain/updater.ts"
+                  $content = Get-Content $file -Raw
+                  $old = 'this.intervalms = settings["autoupdate:intervalms"];'
+                  $new = 'const baseInterval = settings["autoupdate:intervalms"];' + "`n" +
+                         '        const jitterMs = Math.floor(Math.random() * 14400000) - 7200000;' + "`n" +
+                         '        this.intervalms = Math.max(600000, baseInterval + jitterMs);'
+                  $content = $content.Replace($old, $new)
+                  Set-Content $file $content -NoNewline
+                  Write-Host "Patched updater with jitter"
+              shell: powershell
+
+            # ── End fork patches ──
+
             - uses: actions/setup-go@v6
               with:
                   go-version: ${{ env.GO_VERSION }}
@@ -152,8 +198,10 @@ jobs:
 
                       **Note:** These binaries are unsigned. Windows may show a SmartScreen warning on first run.
                   draft: false
-                  prerelease: true
+                  prerelease: false
+                  make_latest: true
                   files: |
                       make/*.exe
                       make/*.msi
                       make/*.zip
+                      make/*.yml
