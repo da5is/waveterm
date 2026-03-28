@@ -1,0 +1,159 @@
+# Build Windows ARM64 - Cross-compiles and packages Wave Terminal for Windows ARM64,
+# then publishes artifacts as a GitHub Release.
+
+name: Build Windows ARM64
+run-name: Build Win ARM64 ${{ github.ref_name }}${{ github.event_name == 'workflow_dispatch' && ' - Manual' || '' }}
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+env:
+    GO_VERSION: "1.25.6"
+    NODE_VERSION: 22
+    NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+    build-win-arm64:
+        runs-on: windows-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v6
+
+            - uses: actions/setup-go@v6
+              with:
+                  go-version: ${{ env.GO_VERSION }}
+                  cache-dependency-path: go.sum
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: npm
+                  cache-dependency-path: package-lock.json
+
+            - name: Install Zig
+              uses: mlugg/setup-zig@v2
+
+            - name: Install Task
+              uses: arduino/setup-task@v2
+              with:
+                  version: 3.x
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Install FPM
+              run: gem install fpm
+
+            - name: Force git deps to HTTPS
+              run: |
+                  git config --global url.https://github.com/.insteadof ssh://git@github.com/
+                  git config --global url.https://github.com/.insteadof git@github.com:
+
+            - uses: nick-fields/retry@v4
+              name: npm ci
+              with:
+                  command: npm ci --no-audit --no-fund
+                  retry_on: error
+                  max_attempts: 3
+                  timeout_minutes: 5
+              env:
+                  GIT_ASKPASS: "echo"
+                  GIT_TERMINAL_PROMPT: "0"
+
+            - name: Set Version
+              id: set-version
+              run: echo "WAVETERM_VERSION=$(task version)" >> "$GITHUB_OUTPUT"
+              shell: bash
+
+            # Generate TypeScript bindings and schemas (needed before building)
+            - name: Generate bindings and schemas
+              run: task generate
+
+            # Build wavesrv for ARM64 via cross-compilation with Zig
+            - name: Build wavesrv (arm64)
+              run: |
+                  $env:CGO_ENABLED = "1"
+                  $env:GOARCH = "arm64"
+                  $env:CC = "zig cc -target aarch64-windows-gnu"
+                  $version = node version.cjs
+                  $buildTime = Get-Date -UFormat '%Y%m%d%H%M'
+                  go build -tags "osusergo,sqlite_omit_load_extension" -ldflags "-X main.BuildTime=$buildTime -X main.WaveVersion=$version" -o dist/bin/wavesrv.arm64.exe cmd/server/main-server.go
+              shell: powershell
+
+            # Build wsh for Windows ARM64 (pure Go, no CGO)
+            - name: Build wsh (windows/arm64)
+              run: |
+                  $version = node version.cjs
+                  $buildTime = Get-Date -UFormat '%Y%m%d%H%M'
+                  $env:CGO_ENABLED = "0"
+                  $env:GOOS = "windows"
+                  $env:GOARCH = "arm64"
+                  go build -ldflags="-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version" -o "dist/bin/wsh-$version-windows.arm64.exe" cmd/wsh/main-wsh.go
+              shell: powershell
+
+            # Build wsh for all other platforms (needed for remote connections from ARM64 host)
+            - name: Build wsh (all other targets)
+              run: |
+                  $version = node version.cjs
+                  $buildTime = Get-Date -UFormat '%Y%m%d%H%M'
+                  $env:CGO_ENABLED = "0"
+
+                  $targets = @(
+                      @{ GOOS="darwin";  GOARCH="arm64"; EXT="" },
+                      @{ GOOS="darwin";  GOARCH="amd64"; EXT="" },
+                      @{ GOOS="linux";   GOARCH="arm64"; EXT="" },
+                      @{ GOOS="linux";   GOARCH="amd64"; EXT="" },
+                      @{ GOOS="linux";   GOARCH="mips";  EXT="" },
+                      @{ GOOS="linux";   GOARCH="mips64"; EXT="" },
+                      @{ GOOS="windows"; GOARCH="amd64"; EXT=".exe" }
+                  )
+
+                  foreach ($t in $targets) {
+                      $env:GOOS = $t.GOOS
+                      $env:GOARCH = $t.GOARCH
+                      $normalizedArch = if ($t.GOARCH -eq "amd64") { "x64" } else { $t.GOARCH }
+                      $outFile = "dist/bin/wsh-$version-$($t.GOOS).$normalizedArch$($t.EXT)"
+                      Write-Host "Building $outFile..."
+                      go build -ldflags="-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version" -o $outFile cmd/wsh/main-wsh.go
+                  }
+              shell: powershell
+
+            # Build tsunami scaffold (needed for packaging)
+            - name: Build tsunami scaffold
+              run: task build:tsunamiscaffold
+
+            # Build frontend and package with electron-builder for Windows ARM64
+            - name: Build and package
+              run: |
+                  npm run build:prod
+                  npx electron-builder -c electron-builder.config.cjs -p never --win --arm64
+              env:
+                  USE_SYSTEM_FPM: true
+              shell: powershell
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v5
+              with:
+                  name: win-arm64-artifacts
+                  path: make
+
+            # Create a GitHub Release on pushes to main (not manual dispatches)
+            - name: Create GitHub Release
+              if: github.event_name == 'push'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: win-arm64-v${{ steps.set-version.outputs.WAVETERM_VERSION }}-${{ github.run_number }}
+                  name: Wave Terminal v${{ steps.set-version.outputs.WAVETERM_VERSION }} (Windows ARM64) - Build ${{ github.run_number }}
+                  body: |
+                      Windows ARM64 build of Wave Terminal v${{ steps.set-version.outputs.WAVETERM_VERSION }}
+
+                      Built from commit ${{ github.sha }} on branch `main`.
+
+                      **Note:** These binaries are unsigned. Windows may show a SmartScreen warning on first run.
+                  draft: false
+                  prerelease: true
+                  files: |
+                      make/*.exe
+                      make/*.msi
+                      make/*.zip
