@@ -1,3 +1,18 @@
+<!-- FORK-BANNER-START -->
+> [!IMPORTANT]
+> ## 🔀 Unofficial Windows ARM64 Fork
+>
+> This is an **unofficial fork** of [Wave Terminal](https://github.com/wavetermdev/waveterm) that provides Windows ARM64 builds.
+>
+> ### Fork Changes
+> - **Windows ARM64 builds** — cross-compiled and published as GitHub Releases on every upstream sync
+> - **Auto-updater** — points to this fork's GitHub Releases instead of upstream's servers
+> - **Update check interval** — changed to daily (±2h jitter) to reduce GitHub API load
+> - **Unsigned binaries** — Windows SmartScreen may warn on first run
+>
+> **Current version:** `0.14.4` · **Upstream sync:** [`02b9e5f`](https://github.com/wavetermdev/waveterm/commit/02b9e5fe80bc27f7cc15126924c09a48ce2f44dd) · **Downloads:** [Releases](https://github.com/da5is/waveterm/releases)
+<!-- FORK-BANNER-END -->
+
 <p align="center">
   <a href="https://www.waveterm.dev">
 	<picture>
