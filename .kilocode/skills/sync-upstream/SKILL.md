@@ -32,20 +32,26 @@ When merging upstream, conflicts typically occur in:
 | `.github/workflows/testdriver.yml` | Fork deletes it; upstream modifies it | Keep deletion (`git rm`) |
 | `README.md` | Fork adds banner; upstream modifies content | Usually auto-merges; if not, keep both changes |
 
+## Initial Setup (After a Fresh Clone)
+
+After cloning this fork for the first time (e.g., on a new machine), you must add the upstream remote. This is a local git config and is **not** stored in the repository:
+
+```powershell
+cd C:\Users\da5is\src\forks\waveterm
+git remote add upstream https://github.com/wavetermdev/waveterm.git
+```
+
+Verify with `git remote -v` — you should see both `origin` (da5is/waveterm) and `upstream` (wavetermdev/waveterm).
+
 ## Step-by-Step Guide
 
 ### Step 1: Ensure Upstream Remote Exists
 
 ```powershell
-cd C:\Users\da5is\src\forks\waveterm
 git remote -v
 ```
 
-If `upstream` is not listed, add it:
-
-```powershell
-git remote add upstream https://github.com/wavetermdev/waveterm.git
-```
+If `upstream` is not listed, run the setup step above.
 
 ### Step 2: Fetch Upstream
 
