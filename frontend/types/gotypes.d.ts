@@ -559,12 +559,14 @@ declare global {
 
     // wshrpc.CommandRemoteProcessListData
     type CommandRemoteProcessListData = {
+        widgetid?: string;
         sortby?: string;
         sortdesc?: boolean;
         start?: number;
         limit?: number;
         textsearch?: string;
-        pids?: number[];
+        lastpidorder?: boolean;
+        keepalive?: boolean;
     };
 
     // wshrpc.CommandRemoteProcessSignalData
@@ -1159,6 +1161,7 @@ declare global {
         "bg:bordercolor"?: string;
         "bg:activebordercolor"?: string;
         "layout:vtabbarwidth"?: number;
+        "layout:widgetsvisible"?: boolean;
         "waveai:panelopen"?: boolean;
         "waveai:panelwidth"?: number;
         "waveai:model"?: string;
@@ -1267,10 +1270,11 @@ declare global {
         command?: string;
         status?: string;
         user?: string;
-        mem?: number;
-        mempct?: number;
-        cpu?: number;
-        numthreads?: number;
+        mem: number;
+        mempct: number;
+        cpu: number;
+        numthreads: number;
+        gone?: boolean;
     };
 
     // wshrpc.ProcessListResponse
@@ -1418,6 +1422,7 @@ declare global {
         "term:bellindicator"?: boolean;
         "term:osc52"?: string;
         "term:durable"?: boolean;
+        "term:showsplitbuttons"?: boolean;
         "editor:minimapenabled"?: boolean;
         "editor:stickyscrollenabled"?: boolean;
         "editor:wordwrap"?: boolean;
