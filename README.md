@@ -10,8 +10,9 @@
 > - **Update check interval** — changed to daily (±2h jitter) to reduce GitHub API load
 > - **Unsigned binaries** — Windows SmartScreen may warn on first run
 >
-> **Current version:** `0.14.4` · **Upstream sync:** [`02b9e5f`](https://github.com/wavetermdev/waveterm/commit/02b9e5fe80bc27f7cc15126924c09a48ce2f44dd) · **Downloads:** [Releases](https://github.com/da5is/waveterm/releases)
+> **Current version:** `0.14.4` · **Upstream sync:** [`9f41b57`](https://github.com/wavetermdev/waveterm/commit/9f41b5761c6e19c5cfcc9372d646b4f131e0780a) · **Downloads:** [Releases](https://github.com/da5is/waveterm/releases)
 <!-- FORK-BANNER-END -->
+
 
 <p align="center">
   <a href="https://www.waveterm.dev">
